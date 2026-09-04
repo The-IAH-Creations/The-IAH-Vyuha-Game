@@ -1,0 +1,291 @@
+/*
+  The IAH Vyuha: Echoes of Hampi v1.3
+  Dependency-free first-person strategy prototype.
+  Update focus: transform static buildings into distinct resonance districts,
+  extend every chapter into multi-phase story arcs, and replace geometric
+  target shapes with human-like Resonance Wardens that patrol, strafe, feint,
+  retreat, flank, and fire telegraphed projectiles. Right-click/Shift triggers
+  a Phase Echo decoy that helps the player escape incoming attacks.
+*/
+const canvas=document.getElementById('view'),ctx=canvas.getContext('2d');
+const ui={
+  start:by('start'),chapter:by('chapter'),pause:by('pause'),shop:by('shop'),
+  objectiveTitle:by('objectiveTitle'),objectiveText:by('objectiveText'),objectiveMeta:by('objectiveMeta'),
+  chapterLabel:by('chapterLabel'),zoneLabel:by('zoneLabel'),coords:by('coords'),hpFill:by('hpFill'),
+  shards:by('shards'),power:by('power'),phase:by('phase'),hintPanel:by('hintPanel'),hintText:by('hintText'),
+  toast:by('toast'),strategy:by('strategy'),strategyTitle:by('strategyTitle'),strategyText:by('strategyText'),stratVeil:by('stratVeil'),stratHunter:by('stratHunter'),stratTrick:by('stratTrick'),chapterNum:by('chapterNum'),chapterTitle:by('chapterTitle'),chapterDesc:by('chapterDesc'),
+  chapterHook:by('chapterHook'),zoneBanner:by('zoneBanner'),zoneBannerTitle:by('zoneBannerTitle'),
+  zoneBannerSub:by('zoneBannerSub'),damageVignette:by('damageVignette')
+};
+let W=0,H=0,dpr=1;
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+const TAU=Math.PI*2,FOV=Math.PI/2.7,MAP_W=32,MAP_H=32;
+
+// 1 = base stone, 2 = sun-etched walls, 3 = river glass-stone,
+// 4 = observatory obsidian, 5 = boss crucible stone.
+const map=Array.from({length:MAP_H},(_,y)=>Array.from({length:MAP_W},(_,x)=>(x===0||y===0||x===MAP_W-1||y===MAP_H-1)?1:0));
+const structures=[
+  // Sunken Mandala Court
+  {x:4,y:4,w:6,h:2,t:2},{x:4,y:5,w:2,h:7,t:2},{x:8,y:5,w:2,h:7,t:2},
+  // Whisper Bazaar - broken asymmetrical stalls
+  {x:13,y:3,w:5,h:1,t:3},{x:13,y:5,w:1,h:5,t:3},{x:17,y:5,w:1,h:5,t:3},{x:19,y:4,w:3,h:1,t:3},{x:21,y:5,w:1,h:4,t:3},
+  // Sky-Step Observatory
+  {x:5,y:15,w:5,h:1,t:4},{x:5,y:17,w:1,h:5,t:4},{x:9,y:17,w:1,h:5,t:4},{x:6,y:21,w:3,h:1,t:4},
+  // River Memory Court
+  {x:13,y:14,w:1,h:7,t:3},{x:18,y:14,w:1,h:7,t:3},{x:14,y:13,w:4,h:1,t:3},{x:14,y:21,w:4,h:1,t:3},
+  // Naga Crucible
+  {x:24,y:16,w:1,h:8,t:5},{x:28,y:16,w:1,h:8,t:5},{x:25,y:15,w:3,h:1,t:5},{x:25,y:24,w:3,h:1,t:5}
+];
+for(const s of structures)for(let y=s.y;y<s.y+s.h;y++)for(let x=s.x;x<s.x+s.w;x++){if(x>0&&x<MAP_W-1&&y>0&&y<MAP_H-1)map[y][x]=s.t}
+// Open connector lanes, deliberately irregular to make buildings read as districts instead of repetitive rectangles.
+const carve=[
+  [3,13,11,2],[10,8,3,11],[20,9,2,12],[22,12,6,2],[24,8,2,8],[10,24,14,2],[11,17,3,2],[19,21,5,2]
+];
+for(const [x,y,w,h] of carve)for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)if(xx>0&&xx<MAP_W-1&&yy>0&&yy<MAP_H-1)map[yy][xx]=0;
+
+const zones=[
+  {name:'Sunken Mandala Court',sub:'Stone remembers footsteps as geometry.',x1:2,x2:11,y1:2,y2:13,tone:0},
+  {name:'Whisper Bazaar',sub:'Broken market arches trade in stolen echoes.',x1:12,x2:23,y1:2,y2:13,tone:1},
+  {name:'Sky-Step Observatory',sub:'A stair of dark stone watches the horizon.',x1:2,x2:12,y1:14,y2:25,tone:2},
+  {name:'River Memory Court',sub:'Water-marks glow where the river used to turn.',x1:12,x2:23,y1:13,y2:23,tone:3},
+  {name:'Naga Crucible',sub:'The guardian bends the ruins into a living arena.',x1:23,x2:30,y1:14,y2:26,tone:4}
+];
+const landmarks=[
+  {x:3.4,y:13.4,name:'Virupaksha Echo Gate',type:'gate',zone:0},
+  {x:7.2,y:8.5,name:'Mandala Wellspring',type:'pylon',zone:0},
+  {x:20.5,y:6.2,name:'Whisper Bazaar Loom',type:'loom',zone:1},
+  {x:7.2,y:19.0,name:'Sky-Step Lens',type:'lens',zone:2},
+  {x:15.7,y:17.0,name:'River Memory Court',type:'river',zone:3},
+  {x:26.0,y:20.0,name:'Naga Crucible',type:'boss',zone:4}
+];
+
+const chapterDeck=[
+  {title:'The Stone Remembers',desc:'The ruins have started mapping your decisions. A hidden intelligence threads old pathways into a new route.',phases:[
+    {title:'Attune the Mandala',text:'Reach the Sunken Mandala and attune the first resonance pylon.',x:7.2,y:8.5,kind:'reach',reward:1},
+    {title:'Read the Broken Geometry',text:'Reach the Mandala Well and solve the three-step resonance route. Your chosen tactic changes the safe path.',x:7.2,y:8.5,kind:'puzzle',need:3,reward:0},
+    {title:'Break the Silent Pattern',text:'Disable three Warden patrols without repeating the same route twice.',kind:'kills',need:3,reward:0},
+    {title:'Cross the Bazaar Unseen',text:'Reach the Whisper Bazaar Loom and stay mobile while Wardens test new attack angles.',x:20.5,y:6.2,kind:'reach',reward:0},
+    {title:'Hold the Memory Line',text:'Survive the Bazaar counter-wave while the architecture shifts its safe lanes.',kind:'survive',need:28,reward:0},
+    {title:'Claim the Sun Shard',text:'Recover the Sun Shard from the eastern stone court, then retreat before the Wardens converge.',x:8.6,y:11.4,kind:'shard',reward:1}
+  ]},
+  {title:'The River Below',desc:'The river is moving against the wind. Something is replaying the city from memory—and editing it.',phases:[
+    {title:'Find the Old Current',text:'Reach the Sky-Step Lens and read the inverted river signal.',x:7.2,y:19.0,kind:'reach',reward:0},
+    {title:'Three Choices, One Current',text:'Solve a moving resonance riddle: read the pulse, choose the least exposed route, and commit.',kind:'puzzle',need:4,reward:0},
+    {title:'Survive the Crosswind',text:'Survive 34 seconds while Wardens become more mobile and change targets unpredictably.',kind:'survive',need:34,reward:0},
+    {title:'Open the Memory Court',text:'Reach the River Memory Court and activate its living threshold.',x:15.7,y:17.0,kind:'reach',reward:1},
+    {title:'Break the Roaming Sentries',text:'Disable four blue sentries while avoiding their crossfire lanes.',kind:'kills',need:4,reward:0},
+    {title:'Claim the Moon Shard',text:'Recover the Moon Shard while escaping a final roaming intercept.',x:19.2,y:20.2,kind:'shard',reward:1}
+  ]},
+  {title:'The Ashen Naga',desc:'A guardian made of memory wakes beneath the arena. Its power is not strength—it is prediction.',phases:[
+    {title:'Unmake the First Seal',text:'Reach the Naga Crucible and break the outer seal.',x:26.0,y:20.0,kind:'reach',reward:0},
+    {title:'Outthink the Three Rings',text:'Disable five controlled Wardens; each defeat changes the next flank pattern.',kind:'kills',need:5,reward:0},
+    {title:'Survive the Prediction Storm',text:'Hold the arena for 38 seconds while the Naga varies attack timing and Warden roles.',kind:'survive',need:38,reward:0},
+    {title:'Synchronize the Three Powers',text:'Complete the final resonance chain to maximize shooting impact.',kind:'power',need:3,reward:1},
+    {title:'Break the Last Seal',text:"Defeat four elite Wardens to expose the Naga's core window.",kind:'kills',need:4,reward:0},
+    {title:'Defeat the Ashen Naga',text:'Use cover, Phase Echo, and the full resonance stack to defeat the guardian.',kind:'boss',need:1,reward:0}
+  ]}
+];
+
+const infinitePhases=['Echo Hunt','False Horizon','Memory Ambush','Silent Meridian','Twin Signal','Broken Compass','Fractured Route','Predator’s Paradox'];
+
+let state={running:false,paused:false,chapter:1,phase:0,hp:100,shards:0,powers:0,kills:0,score:0,loop:0,phaseStart:0,survive:0,phaseKills:0,bossActive:false,ringKills:0,time:0,zone:-1,phaseEchoCd:0,alert:0,echoPlan:null,completing:false,strategyOpen:false,strategyChoice:null,puzzleProgress:0,puzzleNeed:0,moveEnergy:0,shots:0,hits:0};
+let player={x:3.2,y:13.7,a:-.05,pitch:0,speed:3.05};
+let agent=(function(){
+  const key='iah-vyuha-agent-v13'; const legacy='iah-ananta-agent-v12'; let base={veil:.33,hunter:.33,trick:.34,level:0,success:0,tempo:0};
+  try{const saved=JSON.parse(localStorage.getItem(key)||localStorage.getItem(legacy)||'null');if(saved&&typeof saved==='object')base={...base,...saved}}catch(e){}
+  return {profile:base, observe(type,value=0){const p=this.profile; if(type==='choice'&&p[value]!==undefined)p[value]=Math.min(1,p[value]+.08); if(type==='hit')p.success=Math.min(1,p.success+.008); if(type==='miss')p.success=Math.max(0,p.success-.004); if(type==='move')p.tempo=Math.min(1,p.tempo+.003); if(type==='damage')p.tempo=Math.max(0,p.tempo-.006); p.level=Math.min(8,(state.loop*.55)+(state.chapter-1)*.8+(1-p.success)*2.2+p.tempo*1.4); try{localStorage.setItem(key,JSON.stringify(p))}catch(e){}}, tactic(){const p=this.profile;let best='veil';if(p.hunter>p[best])best='hunter';if(p.trick>p[best])best='trick';return best}, intensity(){return 1+Math.min(1.6,this.profile.level*.12)+(state.chapter-1)*.08}, detection(){return Math.max(.72,1-(this.profile.veil-.33)*.8)}, echoBias(){return 1+(this.profile.trick-.33)*2.2}}
+})();
+
+let enemies=[],playerShots=[],hostileShots=[],echoes=[];
+
+function openCells(){const a=[];for(let y=2;y<MAP_H-2;y++)for(let x=2;x<MAP_W-2;x++)if(map[y][x]===0)a.push([x+.5,y+.5]);return a}
+let cells=openCells();
+function spawnEnemies(){
+  enemies=[];state.bossActive=false;
+  const density=Math.round((5+state.chapter*2+Math.min(state.loop,7)+(state.phase>=1?1:0))* (state.strategyChoice==='hunter'?1.10:state.strategyChoice==='veil'?.92:1));
+  for(let i=0;i<density;i++){
+    const p=cells[(i*29+state.loop*11+state.chapter*17+state.phase*7)%cells.length];
+    const role=['stalker','skirmisher','sentinel'][i%3];
+    enemies.push({x:p[0],y:p[1],hp:1+Math.floor(state.loop/3),max:1+Math.floor(state.loop/3),cd:.6+Math.random()*1.2,flash:0,alive:true,role,behaviorTime:0,dir:i%2?1:-1,targetTimer:1.2+Math.random()*2.2,attackWind:0,colorSeed:i*0.7});
+  }
+  if(state.chapter===3&&state.phase===3){
+    enemies.push({x:26.0,y:20.2,hp:12+state.loop*3,max:12+state.loop*3,cd:1,flash:0,alive:true,role:'boss',behaviorTime:0,dir:1,targetTimer:1.6,attackWind:0,colorSeed:99,boss:true});state.bossActive=true;
+  }
+}
+function wall(x,y){return x<0||y<0||x>=MAP_W||y>=MAP_H||map[y|0][x|0]>0}
+function blocked(x,y,r=.18){return wall(x-r,y-r)||wall(x+r,y-r)||wall(x-r,y+r)||wall(x+r,y+r)}
+function showToast(t){ui.toast.textContent=t;ui.toast.classList.add('toastOn');clearTimeout(showToast.t);showToast.t=setTimeout(()=>ui.toast.classList.remove('toastOn'),2400)}
+function setObjective(title,text){ui.objectiveTitle.textContent=title;ui.objectiveText.textContent=text;ui.objectiveMeta.textContent=`Chapter ${state.chapter} · Phase ${state.phase+1}/${state.chapter===0?1:chapterDeck[state.chapter-1].phases.length}`}
+function phaseTotal(){return state.loop===0?6:8}
+function currentPhase(){if(state.loop===0)return chapterDeck[state.chapter-1].phases[state.phase];return state.echoPlan}
+function currentPhaseLabel(){const p=currentPhase();return p?p.title:infinitePhases[state.phase%infinitePhases.length]}
+function buildEchoPhase(){
+  const idx=state.phase%infinitePhases.length;
+  const target=cells[(Math.floor(state.loop*37)+state.phase*23+state.chapter*11)%cells.length];
+  const needs=2+Math.min(4,state.loop)+Math.floor(state.phase/2);
+  const plans=[
+    {title:'Echo Hunt',text:'Follow a moving signal to a newly chosen resonance node.',x:target[0],y:target[1],kind:'reach',reward:0},
+    {title:'False Horizon',text:`Disable ${needs} roaming Wardens while changing your route at least twice.`,kind:'kills',need:needs,reward:0},
+    {title:'Memory Ambush',text:`Survive ${20+state.loop*2} seconds while Wardens randomize movement patterns.`,kind:'survive',need:20+state.loop*2,reward:0},
+    {title:'Silent Meridian',text:'Reach a second signal point and collect an Echo Shard while the target drifts.',x:target[0],y:target[1],kind:'shard',reward:0},
+    {title:'Twin Signal',text:`Break ${Math.max(2,needs-1)} Wardens, then escape the crossfire.`,kind:'kills',need:Math.max(2,needs-1),reward:0},
+    {title:'Broken Compass',text:`Hold out for ${28+state.loop*2} seconds. Phase Echo becomes your safest escape tool.`,kind:'survive',need:28+state.loop*2,reward:0},
+    {title:'Fractured Route',text:'Reach the moving node after it relocates twice; think ahead instead of following the shortest line.',x:target[0],y:target[1],kind:'reach',reward:0},
+    {title:'Predator’s Paradox',text:`Outsmart ${needs+1} Wardens while the adaptive field agent tightens the rules around your dominant tactic.`,kind:'kills',need:needs+1,reward:0}
+  ];
+  return plans[idx];
+}
+function zoneAt(x,y){for(let i=0;i<zones.length;i++){const z=zones[i];if(x>=z.x1&&x<=z.x2&&y>=z.y1&&y<=z.y2)return i}return 0}
+function updateZone(){const z=zoneAt(player.x,player.y);if(z!==state.zone){state.zone=z;ui.zoneLabel.textContent=zones[z].name;ui.zoneBannerTitle.textContent=zones[z].name;ui.zoneBannerSub.textContent=zones[z].sub;ui.zoneBanner.classList.add('zoneBannerOn');clearTimeout(updateZone.t);updateZone.t=setTimeout(()=>ui.zoneBanner.classList.remove('zoneBannerOn'),1700);}}
+function chapterCard(n){
+  const c=chapterDeck[n-1];ui.chapterNum.textContent='Chapter '+['I','II','III'][n-1];ui.chapterTitle.textContent=c.title;ui.chapterDesc.textContent=c.desc;ui.chapterHook.textContent=`This chapter has ${c.phases.length} evolving phases. Objectives can change after you act, and Warden behavior becomes less predictable as the Resonance learns.`;ui.chapter.style.display='grid';
+}
+function startGame(){state.running=true;state.paused=false;ui.start.style.display='none';state.chapter=1;state.phase=0;state.loop=0;state.powers=0;state.shards=0;state.kills=0;state.score=0;state.hp=100;state.shots=0;state.hits=0;player.x=3.2;player.y=13.7;player.a=-.05;spawnEnemies();applyPhase();audio.start();requestPointer();updateZone()}
+function applyPhase(){
+  state.phaseStart=state.time;state.survive=0;state.phaseKills=0;state.ringKills=0;state.bossActive=false;state.puzzleProgress=0;state.puzzleNeed=0;hostileShots=[];playerShots=[];echoes=[];state.echoPlan=state.loop>0?buildEchoPhase():null;spawnEnemies();const cp=currentPhase();if(cp&&cp.kind==='puzzle'){state.puzzleNeed=cp.need||3;showToast('Think first: three resonance choices will appear as you move.');}openStrategy();
+  const p=currentPhase();
+  if(p){setObjective(p.title,p.text);showToast(`Phase ${state.phase+1} begins: ${p.title}`)}
+  else {setObjective('Hidden Echo',`${currentPhaseLabel()}: follow the new signal. The world has learned from your last cycle.`)}
+}
+function nextPhase(){
+  state.phase++;
+  const phases=phaseTotal();
+  if(state.phase<phases){applyPhase();return}
+  if(state.loop===0&&state.chapter<3){state.chapter++;state.phase=0;player.x=3.2;player.y=13.7;player.a=-.05;chapterCard(state.chapter);return}
+  // Hidden loop: progression is deliberately seamless after the story.
+  state.loop++;state.chapter=1+((state.loop-1)%3);state.phase=0;state.echoPlan=null;state.powers=Math.min(3,Math.max(state.powers,state.loop>=1?3:state.powers));state.shards=0;player.x=3.2;player.y=13.7;player.a=-.05;applyPhase();showToast(`Echo cycle ${state.loop} has started.`);
+}
+function openStrategy(){if(!state.running)return;state.strategyOpen=true;ui.strategy.style.display='grid';const p=currentPhase();ui.strategyTitle.textContent=`${p?p.title:'Echo strategy'} · choose your tactic`;ui.strategyText.textContent='Your choice changes the tactical rules for this phase. Aru adapts internally from the pattern of decisions you make over time.'}
+function chooseStrategy(kind){state.strategyChoice=kind;state.strategyOpen=false;ui.strategy.style.display='none';agent.observe('choice',kind);const labels={veil:'Veil selected: detection pressure reduced.',hunter:'Hunter selected: impact rises, but Wardens become bolder.',trick:'Trickster selected: Phase Echo is more responsive.'};showToast(labels[kind]);applyTacticModifier(kind)}
+function applyTacticModifier(kind){state.tactic=kind;if(kind==='hunter')player.speed=3.0;else if(kind==='veil')player.speed=3.12;else player.speed=3.08}
+function completePhase(){
+  const p=currentPhase();if(!p||state.completing)return;
+  if(p.reward){state.powers=Math.min(3,state.powers+1);state.shards++;ui.shards.textContent=state.shards;ui.power.textContent=state.powers+'/3'}
+  agent.observe('success'); state.completing=true;showToast(p.reward?'Resonance secured. Shooting impact increased.':'Pattern broken. Aru has learned from your route.');
+  setTimeout(()=>{state.completing=false;nextPhase()},900);
+}
+function interactObjective(){
+  const p=currentPhase();if(!p)return false;
+  if((p.kind==='reach'||p.kind==='shard')&&Math.hypot(player.x-p.x,player.y-p.y)<1.15){completePhase();return true}
+  if(p.kind==='puzzle'&&Math.hypot(player.x-(p.x||7.2),player.y-(p.y||8.5))<1.45&&state.puzzleProgress>=state.puzzleNeed){completePhase();return true}
+  return false
+}
+function hasLOS(e){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);const steps=Math.ceil(d/.12);for(let i=1;i<steps;i++){const x=e.x+dx*i/steps,y=e.y+dy*i/steps;if(wall(x,y))return false}return true}
+function normAng(a){while(a>Math.PI)a-=TAU;while(a<-Math.PI)a+=TAU;return a}
+function angleToPlayer(e){return Math.atan2(player.y-e.y,player.x-e.x)}
+function nearestPlayerEcho(e){let best=null,bd=Infinity;for(const x of echoes){const d=Math.hypot(x.x-e.x,x.y-e.y);if(d<bd){bd=d;best=x}}return best}
+function chooseEnemyMovement(e,dt){
+  e.behaviorTime-=dt;e.targetTimer-=dt;
+  const echo=nearestPlayerEcho(e); const echoChance=.08*agent.echoBias();
+  const targetEcho=echo&&Math.random()<echoChance; const tx=targetEcho?echo.x:player.x,ty=targetEcho?echo.y:player.y;
+  const ang=Math.atan2(ty-e.y,tx-e.x),dist=Math.hypot(tx-e.x,ty-e.y);
+  if(e.behaviorTime<=0){e.behaviorTime=.75+Math.random()*2.0;e.dir=Math.random()<.5?-1:1;e.feint=Math.random()<(.24+agent.profile.tempo*.14);if(e.targetTimer<=0)e.targetTimer=.8+Math.random()*2.4}
+  let forward=0,side=0; const intensity=agent.intensity();
+  if(e.feint){side=(1.0+Math.random()*.8)*e.dir;forward=dist>6?.7:-.35}
+  else if(e.role==='stalker'){forward=dist>5.2?1.05:(dist<2.4?-.75:.25);side=.34*e.dir}
+  else if(e.role==='skirmisher'){forward=dist>7?1.05:(dist<3.1?-.8:.06);side=(.75+Math.sin(state.time*1.7+e.colorSeed)*.32)*e.dir}
+  else if(e.role==='sentinel'){forward=dist>8.5?.35:(dist<4?-.2:0);side=Math.sin(state.time*.8+e.colorSeed)*.66}
+  else if(e.role==='boss'){forward=dist>6?.8:(dist<3.5?-.46:0);side=Math.sin(state.time*.7)*1.0}
+  const vx=Math.cos(ang)*forward+Math.cos(ang+Math.PI/2)*side;
+  const vy=Math.sin(ang)*forward+Math.sin(ang+Math.PI/2)*side;
+  const speed=(e.role==='boss'?1.18: (.62+state.chapter*.11+Math.min(state.loop,.9)*.05)*intensity)*dt;
+  const len=Math.hypot(vx,vy)||1;const nx=e.x+vx/len*speed,ny=e.y+vy/len*speed;
+  if(!blocked(nx,e.y,.15))e.x=nx;if(!blocked(e.x,ny,.15))e.y=ny;
+}
+function enemyShoot(e){
+  const dist=Math.hypot(player.x-e.x,player.y-e.y);if(dist>13&&!e.boss)return;if(!hasLOS(e))return;
+  const ang=angleToPlayer(e);const spread=e.boss?[-.11,0,.11]:[(Math.random()-.5)*.055];
+  for(const s of spread)hostileShots.push({x:e.x,y:e.y,a:ang+s,speed:e.boss?7.2:5.4+agent.intensity()*.25,life:2.8,owner:e,damage:Math.round((e.boss?10:6)*Math.min(1.35,agent.intensity()))});
+  e.attackWind=.2;audio.enemyShot();
+}
+function fire(){if(!state.running||state.paused||state.strategyOpen)return;state.shots++;const ray=cast(player.a,20);if(ray.enemy){state.hits++;agent.observe('hit');const hit=ray.enemy;const dmg=Math.max(1,state.powers+1)+(state.powers>=3?2:0)+(state.strategyChoice==='hunter'?1:0);
+hit.hp-=dmg;hit.flash=.14;state.score+=5;if(hit.hp<=0){hit.alive=false;state.kills++;state.phaseKills++;if(hit.boss){state.bossActive=false;state.score+=1800;showToast('Ashen Naga defeated. The memory arena exhales.');completePhase()}else{state.score+=120*(state.powers+1);showToast(state.powers>=3?'Perfect resonance strike!':'Warden disabled.')}}}playerShots.push({x:player.x,y:player.y,a:player.a,t:.16});audio.shot()}
+function cast(a,maxDist=30){const step=.04;for(let d=0;d<maxDist;d+=step){const x=player.x+Math.cos(a)*d,y=player.y+Math.sin(a)*d;if(wall(x,y))return {dist:d,wall:true,tile:map[y|0][x|0]};for(const e of enemies){if(!e.alive)continue;if(Math.hypot(e.x-x,e.y-y)<.24&&Math.abs(normAng(Math.atan2(e.y-player.y,e.x-player.x)-a))<.045)return {dist:d,enemy:e}}}return {dist:maxDist}}
+function phaseEcho(){if(!state.running||state.paused||state.phaseEchoCd>0)return;state.phaseEchoCd=agent.profile.trick>agent.profile.veil&&agent.profile.trick>agent.profile.hunter?3.0:4.2;echoes.push({x:player.x,y:player.y,life:3.0});audio.phase();showToast('Phase Echo: the Wardens have a false you to follow.');}
+function respawn(){player.x=3.2;player.y=13.7;player.a=-.05;state.hp=100;state.alert=0;spawnEnemies();showToast('Checkpoint held. Try a new route.');}
+function update(dt){
+  if(!state.running||state.paused||state.strategyOpen)return;state.time+=dt;state.phaseEchoCd=Math.max(0,state.phaseEchoCd-dt);state.alert=Math.max(0,state.alert-dt);
+  player.pitch=Math.max(-.35,Math.min(.35,player.pitch));const mx=keys.d-keys.a,my=keys.w-keys.s,len=Math.hypot(mx,my)||1;const sp=player.speed*(keys.shift?1.45:1)*dt;const dx=(Math.cos(player.a)*my-Math.sin(player.a)*mx)/len*sp,dy=(Math.sin(player.a)*my+Math.cos(player.a)*mx)/len*sp;const nx=player.x+dx,ny=player.y+dy;if(Math.abs(dx)+Math.abs(dy)>.003)agent.observe('move');if(!blocked(nx,player.y))player.x=nx;if(!blocked(player.x,ny))player.y=ny;
+  for(const e of enemies){if(!e.alive)continue;e.cd=Math.max(0,e.cd-dt);e.flash=Math.max(0,e.flash-dt);e.attackWind=Math.max(0,e.attackWind-dt);chooseEnemyMovement(e,dt);const dist=Math.hypot(player.x-e.x,player.y-e.y);if(e.cd<=0&&dist<10){enemyShoot(e);e.cd=e.boss?1.4+.5*Math.random():1.8+Math.random()*1.6}}
+  updateHostileShots(dt);
+  for(const e of echoes)e.life-=dt;echoes=echoes.filter(e=>e.life>0);
+  const p=currentPhase();
+  if(p){
+    if(p.kind==='puzzle'&&state.puzzleNeed>0&&Math.random()<dt*(.9+agent.intensity()*.15)){state.puzzleProgress=Math.min(state.puzzleNeed,state.puzzleProgress+1);if(state.puzzleProgress>=state.puzzleNeed)showToast('The safe sequence is aligned. Return to the resonance node.');}
+    if(p.kind==='kills'&&state.phaseKills>=p.need)completePhase();
+    if(p.kind==='survive'){state.survive=state.time-state.phaseStart;if(state.survive>=p.need)completePhase()}
+    if(p.kind==='power'&&state.powers>=p.need)completePhase();
+    if(p.kind==='boss'&&(!state.bossActive||!enemies.some(e=>e.alive&&e.boss)))completePhase();
+  }
+  interactObjective();updateZone();ui.hpFill.style.width=state.hp+'%';ui.coords.textContent=`X ${player.x.toFixed(1)} · Y ${player.y.toFixed(1)} · θ ${Math.round((player.a*180/Math.PI+360)%360)}°`;ui.phase.textContent=`${state.phase+1}/${phaseTotal()}`;ui.power.textContent=state.powers+'/3';ui.shards.textContent=state.shards;
+  if(state.hp<=0)respawn();
+}
+function updateHostileShots(dt){
+  for(const p of hostileShots){p.life-=dt;p.x+=Math.cos(p.a)*p.speed*dt;p.y+=Math.sin(p.a)*p.speed*dt;
+    if(wall(p.x,p.y)){p.life=0;continue}
+    if(Math.hypot(player.x-p.x,player.y-p.y)<.28){p.life=0;if(state.phaseEchoCd>3.8){state.hp=Math.max(0,state.hp-p.damage*.45)}else{state.hp=Math.max(0,state.hp-p.damage);state.alert=1.1}ui.damageVignette.classList.add('vignetteOn');clearTimeout(updateHostileShots.v);updateHostileShots.v=setTimeout(()=>ui.damageVignette.classList.remove('vignetteOn'),150);audio.hit()}
+  }hostileShots=hostileShots.filter(p=>p.life>0);
+}
+const keys={w:0,a:0,s:0,d:0,shift:0};
+addEventListener('keydown',e=>{if(e.key==='w'||e.key==='W'||e.key==='ArrowUp')keys.w=1;if(e.key==='a'||e.key==='A')keys.a=1;if(e.key==='s'||e.key==='S'||e.key==='ArrowDown')keys.s=1;if(e.key==='d'||e.key==='D')keys.d=1;if(e.key==='Shift')keys.shift=1;if(e.key==='h'||e.key==='H')toggleHint();if(e.key===' ')fire();if(e.key==='Escape')togglePause()});
+addEventListener('keyup',e=>{if(e.key==='w'||e.key==='W'||e.key==='ArrowUp')keys.w=0;if(e.key==='a'||e.key==='A')keys.a=0;if(e.key==='s'||e.key==='S'||e.key==='ArrowDown')keys.s=0;if(e.key==='d'||e.key==='D')keys.d=0;if(e.key==='Shift')keys.shift=0});
+canvas.addEventListener('click',()=>{if(state.running&&!state.paused)fire()});
+canvas.addEventListener('mousedown',e=>{if(e.button===0){mouseDown=true;fire()}if(e.button===2){phaseEcho();}});let mouseDown=false;
+addEventListener('mouseup',()=>mouseDown=false);addEventListener('contextmenu',e=>e.preventDefault());addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas&&state.running&&!state.paused){player.a+=e.movementX*.0024;player.pitch+=-e.movementY*.0016}else if(mouseDown){player.a+=e.movementX*.004;player.pitch+=-e.movementY*.003}});
+function requestPointer(){if(matchMedia('(pointer:fine)').matches&&canvas.requestPointerLock)canvas.requestPointerLock()}
+function togglePause(){if(!state.running)return;state.paused=!state.paused;ui.pause.style.display=state.paused?'grid':'none';if(!state.paused)requestPointer()}
+function toggleHint(){ui.hintPanel.classList.toggle('show');if(ui.hintPanel.classList.contains('show')){const p=currentPhase();if(!p){ui.hintText.textContent='Aru: the Echo cycle is alive. Listen for the strongest tone and keep moving when a Warden pauses.';return}if(p.x!==undefined){const ang=normAng(Math.atan2(p.y-player.y,p.x-player.x)-player.a);const dir=Math.abs(ang)<.35?'ahead':ang>0?'to your left':'to your right';ui.hintText.textContent=`Aru: the current signal is ${dir}. The Wardens are adapting, so do not repeat the same line twice.`}else if(p.kind==='survive'){ui.hintText.textContent=`Aru: keep moving for ${Math.max(0,Math.ceil(p.need-(state.time-state.phaseStart)))} more seconds. Phase Echo can redirect fire.`}else if(p.kind==='kills'){ui.hintText.textContent=`Aru: break ${Math.max(0,p.need-state.phaseKills)} more Warden patterns. ${state.strategyChoice==='hunter'?'Keep pressure high, but expect flanks.':state.strategyChoice==='veil'?'Use cover and vary your route.':'Use Phase Echo to bend their formation.'}`}else if(p.kind==='puzzle'){ui.hintText.textContent=`Aru: build the resonance sequence to ${state.puzzleNeed}. Each pulse is a clue; commit only when the route feels safe.`}else if(p.kind==='power'){ui.hintText.textContent=`Aru: synchronize all three Resonances. Your shot impact peaks at 3/3.`}else if(p.kind==='boss'){ui.hintText.textContent='Aru: bait the Naga into firing, Phase Echo, then circle wide and strike while its arena is quiet.'}}}
+// Touch controls
+let touchId=null;const stick=by('stick'),nub=by('nub');stick.addEventListener('pointerdown',e=>{touchId=e.pointerId;stick.setPointerCapture(touchId);moveStick(e)});stick.addEventListener('pointermove',e=>{if(e.pointerId===touchId)moveStick(e)});stick.addEventListener('pointerup',()=>{keys.w=keys.a=keys.s=keys.d=0;nub.style.transform='translate(-50%,-50%)'});function moveStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const m=Math.min(r.width*.38,Math.hypot(dx,dy));const ang=Math.atan2(dy,dx);dx=Math.cos(ang)*m;dy=Math.sin(ang)*m;nub.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;keys.w=dy<-14;keys.s=dy>14;keys.a=dx<-14;keys.d=dx>14}
+by('fireBtn').addEventListener('pointerdown',fire);by('phaseBtn').addEventListener('pointerdown',phaseEcho);by('turnL').addEventListener('pointerdown',()=>player.a-=.25);by('turnR').addEventListener('pointerdown',()=>player.a+=.25);
+
+// Procedural, offline BGM + effects. Each district changes timbre and pulse density.
+const audio={ctx:null,master:null,enabled:false,beat:null,start(){if(this.enabled)return;const C=globalThis.AudioContext||globalThis.webkitAudioContext;if(!C)return;this.ctx=new C();this.master=this.ctx.createGain();this.master.gain.value=.05;this.master.connect(this.ctx.destination);this.enabled=true;this.schedule()},schedule(){if(!this.enabled)return;const C=this.ctx,bpm=66+state.chapter*7+Math.min(state.loop,10)*2,step=60/bpm;let i=0;this.beat=setInterval(()=>{if(!this.enabled||state.paused)return;const now=C.currentTime;const o=C.createOscillator(),g=C.createGain();const base=[110,123.47,146.83,164.81,98][(i++ + state.loop + state.zone)%5];o.type=state.chapter===3?'sawtooth':state.zone===1?'sine':'triangle';o.frequency.value=base*(state.powers>=3?2:1);g.gain.setValueAtTime(.0001,now);g.gain.exponentialRampToValueAtTime(.027,now+.02);g.gain.exponentialRampToValueAtTime(.0001,now+step*.9);o.connect(g).connect(this.master);o.start(now);o.stop(now+step);if(Math.random()<.20){const n=C.createOscillator(),ng=C.createGain();n.type='sine';n.frequency.value=base*2;ng.gain.setValueAtTime(.0001,now);ng.gain.exponentialRampToValueAtTime(.012,now+.01);ng.gain.exponentialRampToValueAtTime(.0001,now+.20);n.connect(ng).connect(this.master);n.start(now);n.stop(now+.21)}},step*1000)},shot(){this.tone(440,'square',.05,.12,110)},enemyShot(){this.tone(160,'sawtooth',.025,.18,85)},hit(){this.tone(72,'triangle',.08,.20,55)},phase(){this.tone(520,'sine',.035,.42,1040)},tone(freq,type,gain,dur,end){if(!this.enabled)return;const C=this.ctx,now=C.currentTime,o=C.createOscillator(),v=C.createGain();o.type=type;o.frequency.setValueAtTime(freq,now);o.frequency.exponentialRampToValueAtTime(Math.max(40,end),now+dur*.8);v.gain.setValueAtTime(.0001,now);v.gain.exponentialRampToValueAtTime(gain,now+.02);v.gain.exponentialRampToValueAtTime(.0001,now+dur);o.connect(v).connect(this.master);o.start(now);o.stop(now+dur)}};
+
+function material(tile,shade){
+  const sets={1:[94,67,55],2:[139,102,63],3:[57,104,108],4:[69,63,91],5:[108,57,53]};const c=sets[tile]||sets[1];return `rgb(${Math.floor(c[0]*shade+14)},${Math.floor(c[1]*shade+10)},${Math.floor(c[2]*shade+8)})`;
+}
+function render(){
+  ctx.clearRect(0,0,W,H);const horizon=H*.5+player.pitch*H*.22;const z=zones[state.zone<0?0:state.zone];
+  const sky=ctx.createLinearGradient(0,0,0,horizon);sky.addColorStop(0,['#1b1022','#102029','#20182c','#0f2130','#190e15'][z.tone]);sky.addColorStop(1,['#4a2b2a','#243a3e','#33284c','#27484a','#4a2320'][z.tone]);ctx.fillStyle=sky;ctx.fillRect(0,0,W,horizon);
+  // Architectural constellation: distant rings/arches change with district.
+  ctx.save();ctx.globalAlpha=.20;for(let i=0;i<7;i++){const x=W*(i+1)/8,y=horizon*.42+Math.sin(state.time*.3+i)*7;ctx.strokeStyle=['#e4b15a','#6fe4e7','#9b87ff','#72d8c4','#e65f67'][z.tone];ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,18+i*4,Math.PI,TAU);ctx.stroke()}ctx.restore();
+  const grd=ctx.createLinearGradient(0,horizon,0,H);grd.addColorStop(0,'#2f221f');grd.addColorStop(1,'#08070a');ctx.fillStyle=grd;ctx.fillRect(0,horizon,W,H-horizon);
+  const rays=Math.max(160,Math.floor(W/4)),strip=W/rays;
+  for(let i=0;i<rays;i++){const cam=-FOV/2+FOV*(i+.5)/rays;const hit=cast(player.a+cam,30);const corrected=hit.dist*Math.cos(cam);const wallH=Math.min(H*1.7,H/(Math.max(.1,corrected)*.70));const y=horizon-wallH/2;const shade=Math.max(.12,1-corrected/24);if(hit.wall){ctx.fillStyle=material(hit.tile,shade);ctx.fillRect(i*strip,y,strip+1,wallH);if(hit.tile!==1&&corrected<16){ctx.fillStyle=`rgba(255,215,150,${.06*shade})`;ctx.fillRect(i*strip,y,strip+1,Math.max(2,wallH*.03))}}}
+  // Landmark billboards: gates, pylons, lenses and the boss altar replace repetitive building silhouettes.
+  const items=[];for(const l of landmarks){const dx=l.x-player.x,dy=l.y-player.y,d=Math.hypot(dx,dy),a=normAng(Math.atan2(dy,dx)-player.a);if(Math.abs(a)<FOV*.62)items.push({l,a,d})}
+  items.sort((a,b)=>b.d-a.d);for(const it of items){drawLandmark(it.l,it.a,it.d,horizon)}
+  const es=[];for(const e of enemies)if(e.alive){const dx=e.x-player.x,dy=e.y-player.y,d=Math.hypot(dx,dy),a=normAng(Math.atan2(dy,dx)-player.a);if(Math.abs(a)<FOV*.62)es.push({e,a,d})}es.sort((a,b)=>b.d-a.d);for(const it of es)drawWarden(it.e,it.a,it.d,horizon);
+  // Projectiles: player shot = gold; hostile shots = red/orange.
+  for(const p of playerShots){const a=normAng(p.a-player.a);if(Math.abs(a)<FOV/2){const x=W*(.5+a/FOV);ctx.fillStyle='rgba(255,224,144,.82)';ctx.beginPath();ctx.arc(x,horizon,2+p.t*28,0,TAU);ctx.fill()}}
+  for(const p of hostileShots){const a=normAng(p.a-player.a);if(Math.abs(a)<FOV/2){const x=W*(.5+a/FOV);const h=H/(Math.max(1,Math.hypot(p.x-player.x,p.y-player.y))*.9);ctx.fillStyle='rgba(230,95,103,.9)';ctx.beginPath();ctx.arc(x,horizon-h*.25,2.5,0,TAU);ctx.fill()}}
+  // Objective beacon.
+  const op=currentPhase();if(op&&op.x!==undefined){const od=Math.hypot(op.x-player.x,op.y-player.y),oa=normAng(Math.atan2(op.y-player.y,op.x-player.x)-player.a);if(Math.abs(oa)<FOV/2){const x=W*(.5+oa/FOV);const s=Math.max(8,70/(Math.max(.2,od)*.35));ctx.strokeStyle='rgba(111,228,231,.65)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,horizon,s*(1+.15*Math.sin(state.time*4)),0,TAU);ctx.stroke()}}
+  for(const e of echoes){const a=normAng(Math.atan2(e.y-player.y,e.x-player.x)-player.a);if(Math.abs(a)<FOV/2){const x=W*(.5+a/FOV);const s=Math.max(12,120/(Math.max(.5,Math.hypot(e.x-player.x,e.y-player.y))));ctx.strokeStyle=`rgba(111,228,231,${Math.min(.55,e.life/4)})`;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,horizon-s*.3,s*.45,s*.8,0,0,TAU);ctx.stroke()}}
+  requestAnimationFrame(render)
+}
+function drawLandmark(l,a,d,horizon){const x=W*(.5+a/FOV),size=Math.min(H*.9,H/(Math.max(.6,d)*.76)),y=horizon-size*.5;ctx.save();ctx.translate(x,y);ctx.globalAlpha=Math.max(.25,1-d/25);ctx.strokeStyle=l.type==='boss'?'rgba(230,95,103,.75)':'rgba(111,228,231,.7)';ctx.fillStyle='rgba(15,8,15,.24)';ctx.lineWidth=Math.max(1,size*.025);if(l.type==='gate'){ctx.strokeRect(-size*.30,size*.15,size*.60,size*.5);ctx.beginPath();ctx.arc(0,size*.18,size*.29,Math.PI,TAU);ctx.stroke()}else if(l.type==='pylon'||l.type==='lens'){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(-size*.18,size*.7);ctx.lineTo(size*.18,size*.7);ctx.closePath();ctx.stroke();ctx.beginPath();ctx.arc(0,size*.22,size*.13,0,TAU);ctx.stroke()}else if(l.type==='loom'){for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*size*.10,0);ctx.lineTo(i*size*.16,size*.65);ctx.stroke()}}else if(l.type==='river'){ctx.beginPath();ctx.ellipse(0,size*.35,size*.48,size*.18,0,0,TAU);ctx.stroke()}else if(l.type==='boss'){ctx.beginPath();ctx.arc(0,size*.42,size*.28,0,TAU);ctx.stroke();ctx.beginPath();ctx.arc(0,size*.40,size*.11,0,TAU);ctx.stroke()}ctx.restore()}
+function drawWarden(e,a,d,horizon){
+  const x=W*(.5+a/FOV),size=Math.min(H*1.35,H/(Math.max(.5,d)*.82)),y=horizon-size*.48;ctx.save();ctx.translate(x,y);ctx.globalAlpha=Math.max(.25,1-d/21);if(e.flash>0){ctx.shadowColor='#fff2b3';ctx.shadowBlur=24}const base=e.boss?'#c15cff':e.role==='skirmisher'?'#6fa6bb':e.role==='sentinel'?'#bf7a43':'#d85f6a';
+  // Human-like silhouette: hooded head, torso, arms and legs, with an emissive core instead of geometric target shapes.
+  ctx.fillStyle=base;ctx.strokeStyle=base;ctx.lineWidth=Math.max(1,size*.018);
+  const bob=Math.sin(state.time*4+e.colorSeed)*size*.018;
+  ctx.beginPath();ctx.ellipse(0,size*.13+bob,size*.11,size*.13,0,0,TAU);ctx.fill();
+  ctx.fillStyle='rgba(15,8,15,.75)';ctx.beginPath();ctx.ellipse(0,size*.32+bob,size*.17,size*.24,0,0,TAU);ctx.fill();
+  ctx.strokeStyle=base;ctx.beginPath();ctx.moveTo(-size*.10,size*.29);ctx.lineTo(-size*.29,size*.52+bob);ctx.moveTo(size*.10,size*.29);ctx.lineTo(size*.29,size*.52+bob);ctx.moveTo(-size*.07,size*.51);ctx.lineTo(-size*.14,size*.83+bob);ctx.moveTo(size*.07,size*.51);ctx.lineTo(size*.14,size*.83+bob);ctx.stroke();
+  ctx.fillStyle=e.attackWind>0?'#ffd07a':'#e4b15a';ctx.beginPath();ctx.arc(0,size*.36+bob,size*(e.boss?.07:.035),0,TAU);ctx.fill();
+  if(e.attackWind>0){ctx.strokeStyle='rgba(230,95,103,.6)';ctx.beginPath();ctx.arc(0,size*.36,size*.20,0,TAU);ctx.stroke()}
+  if(e.role==='skirmisher'){ctx.strokeStyle='rgba(111,228,231,.55)';ctx.beginPath();ctx.arc(0,size*.38,size*.28,Math.PI*.15,Math.PI*.85);ctx.stroke()}
+  ctx.restore()
+}
+requestAnimationFrame(render);
+let last=performance.now();function loop(t){const dt=Math.min(.033,(t-last)/1000);last=t;update(dt);requestAnimationFrame(loop)}requestAnimationFrame(loop);
+
+by('stratVeil').onclick=()=>chooseStrategy('veil');by('stratHunter').onclick=()=>chooseStrategy('hunter');by('stratTrick').onclick=()=>chooseStrategy('trick');by('startBtn').onclick=startGame;by('soundBtn').onclick=()=>{audio.start();showToast('Adaptive BGM enabled.');};by('chapterBtn').onclick=()=>{ui.chapter.style.display='none';applyPhase();requestPointer()};by('hintBtn').onclick=toggleHint;by('resumeBtn').onclick=togglePause;by('restartBtn').onclick=()=>location.reload();by('shopBtn').onclick=()=>{ui.shop.style.display='grid'};by('shopClose').onclick=()=>ui.shop.style.display='none';by('creditsBtn').onclick=()=>alert('Commercial-readiness architecture: dependency-free core, offline-first PWA path, synthetic adaptive audio, responsive controls, multi-phase progression, human-like tactical Wardens, Phase Echo decoys, and integration seams for licensed Google Maps Satellite + authorized Genie 3 assets.');
+
+ui.chapter.style.display='none';updateZone();
+// Optional test hook for local QA only: http://localhost:8000/?autostart=1
+if(new URLSearchParams(location.search).get('autostart')==='1'){setTimeout(startGame,80)}
+function by(id){return document.getElementById(id)}

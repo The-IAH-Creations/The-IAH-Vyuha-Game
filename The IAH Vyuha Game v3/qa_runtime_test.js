@@ -1,0 +1,21 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const ids=['view','objectiveTitle','objectiveText','objectiveMeta','chapterLabel','zoneLabel','coords','hpFill','shards','power','phase','hintPanel','hintText','toast','chapterNum','chapterTitle','chapterDesc','chapterHook','zoneBanner','zoneBannerTitle','zoneBannerSub','damageVignette','start','chapter','pause','shop','stick','nub','fireBtn','phaseBtn','turnL','turnR','startBtn','soundBtn','creditsBtn','chapterBtn','hintBtn','resumeBtn','restartBtn','shopBtn','shopClose','strategy','strategyTitle','strategyText','stratVeil','stratHunter','stratTrick'];
+function el(id){return {id,textContent:'',style:{display:'',width:'',transform:''},classList:{s:new Set(),add(x){this.s.add(x)},remove(x){this.s.delete(x)},toggle(x){this.s.has(x)?this.s.delete(x):this.s.add(x)},contains(x){return this.s.has(x)}},addEventListener(){},setPointerCapture(){},getBoundingClientRect(){return {left:0,top:0,width:132,height:132}}};}
+const elements=Object.fromEntries(ids.map(id=>[id,el(id)]));
+elements.view.getContext=()=>({setTransform(){},clearRect(){},createLinearGradient(){return {addColorStop(){}}},fillRect(){},beginPath(){},arc(){},ellipse(){},fill(){},stroke(){},save(){},restore(){},translate(){},strokeRect(){},moveTo(){},lineTo(){},closePath(){}});
+const timers=[];const context={console,document:{getElementById:id=>elements[id]},devicePixelRatio:1,innerWidth:1280,innerHeight:720,addEventListener(){},matchMedia:()=>({matches:false}),requestAnimationFrame(){},performance:{now:()=>1000},setTimeout:(fn)=>{timers.push(fn);return timers.length},clearTimeout(){},setInterval(){return 1},clearInterval(){},URLSearchParams,location:{search:''}};context.globalThis=context;
+vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/game.js','utf8'),context,{filename:'game.js'});
+vm.runInContext('startGame()',context);
+vm.runInContext("chooseStrategy('veil')",context);
+assert.equal(vm.runInContext('state.strategyOpen',context),false);
+assert.equal(vm.runInContext('state.running',context),true);
+assert.equal(vm.runInContext('chapterDeck.length',context),3);
+assert.equal(vm.runInContext('chapterDeck.every(c=>c.phases.length===6)',context),true);
+assert.equal(vm.runInContext("enemies.every(e=>['stalker','skirmisher','sentinel'].includes(e.role))",context),true);
+vm.runInContext('phaseEcho()',context);assert.equal(vm.runInContext('echoes.length',context),1);
+const phaseXY=vm.runInContext('({x:currentPhase().x,y:currentPhase().y})',context);vm.runInContext(`player.x=${phaseXY.x};player.y=${phaseXY.y};update(0.016)`,context);while(vm.runInContext('state.phase',context)===0&&timers.length)timers.shift()();assert.equal(vm.runInContext('state.phase',context),1);
+vm.runInContext('state.loop=1;state.phase=0;applyPhase()',context);assert.equal(vm.runInContext('!!currentPhase()',context),true);assert.equal(vm.runInContext('phaseTotal()',context),8);assert.equal(vm.runInContext('!!currentPhase().kind',context),true);
+assert.ok(vm.runInContext('agent.intensity()>=1',context));
+vm.runInContext("chooseStrategy('trick')",context);
+assert.ok(vm.runInContext('agent.profile.trick>agent.profile.veil',context));
+console.log('QA runtime assertions passed.');

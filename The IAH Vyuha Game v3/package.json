@@ -1,0 +1,12 @@
+{
+  "name": "the-iah-vyuha",
+  "version": "1.3.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --check game.js && node --check sw.js && node qa_runtime_test.js && node qa_release_test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "The IAH Vyuha: Echoes of Hampi \u2014 offline-first first-person strategy adventure prototype."
+}

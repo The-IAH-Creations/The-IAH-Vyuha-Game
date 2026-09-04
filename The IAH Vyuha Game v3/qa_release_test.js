@@ -1,0 +1,24 @@
+const fs=require('fs');const assert=require('assert');
+const root=__dirname;
+const index=fs.readFileSync(`${root}/index.html`,'utf8');
+const game=fs.readFileSync(`${root}/game.js`,'utf8');
+const manifest=JSON.parse(fs.readFileSync(`${root}/manifest.json`,'utf8'));
+const sw=fs.readFileSync(`${root}/sw.js`,'utf8');
+assert(index.length>1000,'index.html is unexpectedly empty');
+assert(index.includes('<canvas id="view"></canvas>'),'canvas entry missing');
+assert(index.includes('<script src="game.js"></script>'),'game.js not wired');
+assert(index.includes('The IAH Vyuha: Echoes of Hampi'),'release title missing');
+assert(manifest.name.includes('The IAH Vyuha'),'manifest name not updated');
+assert(sw.includes('iah-vyuha-v1-3'),'service-worker cache was not bumped');
+assert(/chapterDeck=\[/m.test(game),'chapter deck missing');
+assert((game.match(/kind:'reach'/g)||[]).length>=3,'reach phases missing');
+assert(game.includes('phaseStart:0'),'phase state missing');
+assert(game.includes("const infinitePhases=["),'hidden cycle missing');
+assert(game.includes("function phaseEcho()") || game.includes('phaseEcho=()'),'Phase Echo missing');
+assert(game.includes("['stalker','skirmisher','sentinel']"),'humanoid enemy roles missing');
+assert(game.includes("iah-vyuha-agent-v13"),'adaptive profile key not renamed');
+console.log('Release QA static assertions passed.');
+
+const ids=[...game.matchAll(/by\('([^']+)'\)/g)].map(m=>m[1]);
+for(const id of new Set(ids)) assert(index.includes(`id="${id}"`),`HTML element missing for JS id: ${id}`);
+console.log(`DOM id cross-check passed for ${new Set(ids).size} identifiers.`);
