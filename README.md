@@ -1,72 +1,53 @@
-# The IAH Vyuha: Echoes of Hampi
+# The IAH Vyuha: Echoes of Hampi — v2.0.0
 
-A dependency-free, offline-first, first-person strategy-adventure prototype. **Vyuha** is the final game identity for this iteration: a tactical formation/strategy theme that fits the original brief's emphasis on planning, mystery, action, adaptive difficulty, long-form chapters and an AI-agent layer.
+A single-file, offline-first first-person strategy-adventure prototype built from the original IAH game brief. The playable build is now consolidated into **`The_IAH_Vyuha.html`**: HTML, CSS, rendering, game logic, AI-agent logic, controls, audio, story, enemies and progression are contained in one file.
 
-## What this build covers
+## Product direction
 
-The original design brief called for a professional first-person web game, open-world exploration with optional checkpoints, responsive Laptop/PC/Mobile/Tablet support, adventure/action enemies, story-driven chapters, a hidden repeatable progression layer, an AI agent behind the hint control, strategy, stronger shooting as powers are completed, 3D-style rendering/physics/coordinates, mouse rotation, WASD movement, sound, offline play, commercial-readiness and a real-world-inspired environment. The current build implements those gameplay requirements as an offline web prototype; it does not claim production-grade cloud AI, licensed Google satellite packaging, or a generated Genie 3 asset.
+**The IAH Vyuha** is positioned as a premium-style browser game prototype rather than a claim of AAA production parity. Its design targets cinematic presentation, strategic combat, mystery exploration, adaptive encounters and long-session replayability while remaining dependency-free.
 
-## Core design
+## What is implemented
 
-- **Strategy before fire:** each phase opens with a tactical stance: Veil, Hunter or Trickster.
-- **Long-form story:** 3 narrative chapters, 6 phases each, with mixed objectives instead of one-step chapter completion.
-- **Hidden replay layer:** an 8-phase Echo cycle continues after the story and changes pressure/objectives without exposing an "infinite loop" label.
-- **Human-like enemies:** Resonance Wardens are rendered as humanoid silhouettes with stalking, strafing, retreating, sentinel and feint behaviors.
-- **Escape intelligence:** Phase Echo creates a short-lived decoy, allowing repositioning and tactical escapes.
-- **Adaptive agent:** a local policy learner tracks aggregate gameplay signals and tunes encounter intensity. It stores no identity data and does not transmit telemetry in this prototype.
-- **Distinct areas:** Sunken Mandala Court, Whisper Bazaar, Sky-Step Observatory, River Memory Court and Naga Crucible are designed as different gameplay spaces rather than repeated building blocks.
-- **Offline audio:** procedural WebAudio BGM/SFX keeps the prototype self-contained.
+- 3 story chapters × 6 authored phases with mixed objective types.
+- A concealed 8-phase Echo progression that continues after the story.
+- Five differentiated Hampi-inspired resonance districts.
+- Human-like Resonance Wardens with stalking, strafing, retreating, feints, line-of-sight and telegraphed ranged attacks.
+- Ashen Naga boss encounter with a three-power progression and stronger shooting impact.
+- Phase Echo decoy for tactical repositioning.
+- Veil / Hunter / Trickster strategy choices before phases.
+- Local adaptive field agent behind the Hint button; aggregate-only local learning, no remote telemetry in this build.
+- Procedural WebAudio BGM/SFX with no external audio dependency.
+- 3D-style raycasting, collision physics, coordinates, mouse look, WASD movement and pointer-lock support.
+- Responsive desktop/tablet/mobile controls.
+- Cinematic HUD treatment, scanlines, vignette, mission state and adaptive render density for better device performance.
+- Commercial expansion placeholders using USD/GBP/CHF without pay-to-win mechanics.
+- Standalone HTML operation: the core game can be opened locally without internet.
 
-## Repository structure
+## Run
 
-```text
-.
-├── index.html
-├── game.js
-├── sw.js
-├── manifest.json
-├── qa_runtime_test.js
-├── GENIE3_SCENE_BRIEF.md
-├── COMMERCIAL_READINESS.md
-├── LICENSE-THIRD-PARTY.md
-├── README.md
-├── package.json
-├── serve.sh
-└── serve.bat
-```
+### Standalone
+Open `The_IAH_Vyuha.html` in a modern browser. Core gameplay does not require a network connection.
 
-Backups are intentionally kept outside the GitHub-ready package so the default repository stays clean.
-
-## Run locally
-
-Use any static HTTP server; a server is recommended because service workers require HTTP(S).
-
-```bash
-python3 -m http.server 8000
-```
-
-Open `http://localhost:8000/`. For QA initialization, use `http://localhost:8000/?autostart=1`.
+### Hosted / GitHub Pages
+The repository can also serve the same file through a static host. `index.html` is retained as a compatibility launcher for environments expecting the conventional filename.
 
 ## Controls
 
-Desktop: `WASD` move, mouse look, `Left Click` / `Space` fire, `Right Click` / `Shift` Phase Echo, `H` hint, `Esc` pause.
+**Desktop:** WASD / Arrow keys to move, mouse to look, Left Click / Space to fire, Right Click / Shift for Phase Echo, H for the AI hint, Esc to pause.
 
-Mobile/tablet: virtual stick, turn buttons, fire, Phase Echo and the hint orb.
+**Mobile / tablet:** virtual stick, turn, fire and Phase Echo buttons plus the Hint orb.
 
-## GitHub
+## Architecture
 
-This repository is intentionally dependency-light and can be pushed as a static site. Recommended first commit:
+`The_IAH_Vyuha.html` is the source-of-truth playable artifact. Supporting files are intentionally non-runtime documentation/hosting aids:
 
-```bash
-git init
-git add .
-git commit -m "Initial The IAH Vyuha prototype"
-git branch -M main
-git remote add origin <YOUR_GITHUB_REPOSITORY_URL>
-git push -u origin main
-```
-
-To publish it as a free playable demo, enable **GitHub Pages** for the repository and serve from the repository root.
+- `README.md` — product, run, deployment and architecture notes.
+- `CHANGELOG.md` — release history.
+- `RELEASE_QA.md` — QA evidence and known limitations.
+- `COMMERCIAL_READINESS.md` — production gates and legal/business checklist.
+- `GENIE3_SCENE_BRIEF.md` — authorized external-generation handoff brief.
+- `manifest.json` / `sw.js` — optional PWA/static-host support.
+- `qa_runtime_test.js` / `qa_release_test.js` — regression checks that extract/test the single HTML source.
 
 ## QA
 
@@ -76,14 +57,18 @@ Run:
 npm test
 ```
 
-The test suite performs syntax checks, initializes the game in a mocked DOM, verifies 3 x 6 story phases, validates humanoid enemy roles, exercises Phase Echo and validates the hidden 8-phase cycle and adaptive-agent updates.
+The regression suite checks JavaScript syntax, required DOM IDs, chapter/phase structure, enemy roles, Phase Echo, the hidden Echo cycle, adaptive-agent behavior, title/metadata consistency and the v2 single-file build.
 
-A separate browser smoke test can be run with the optional local Playwright environment.
+A full cross-browser/device certification still requires testing on the actual target browsers and hardware.
 
-## Commercial roadmap
+## Commercial readiness
 
-The prototype is not represented as a final commercial release. Before launch, add licensed/authorized assets, accessibility review, browser/device certification, secure save/account infrastructure, consented analytics, payments, privacy documentation, rate limits and security hardening.
+This is **commercial-architecture-ready**, not a legally certified or store-certified finished game. Before monetized public release, add licensed final art/audio, accessibility certification, privacy/consent flows if any remote service is introduced, payment processing, security review, account/cloud-save architecture if required, analytics governance, content ratings, store compliance and device/browser certification.
 
-## Real-world imagery / Genie 3
+## Google Satellite / Genie 3
 
-The repository does not bundle Google satellite tiles. For an online edition, use Google Maps Platform under its current terms and attribution requirements. `GENIE3_SCENE_BRIEF.md` is a production handoff brief for an authorized Genie workflow; it does not claim that a Genie 3 asset was generated locally in this repository.
+The prototype does not scrape, bundle or redistribute Google satellite tiles, and it does not falsely claim a locally generated Genie 3 asset. `GENIE3_SCENE_BRIEF.md` defines a future authorized integration workflow.
+
+## Privacy
+
+The adaptive prototype stores only aggregate gameplay-learning values in browser local storage. It does not collect names, email addresses, account identifiers or remote telemetry. Any future cloud AI/analytics implementation must introduce explicit privacy and consent controls.

@@ -1,9 +1,13 @@
 # Changelog
 
-## v1.3.0 — The IAH Vyuha
-- Renamed the game from The IAH Ananta to **The IAH Vyuha: Echoes of Hampi**.
-- Restored the main `index.html` entry point and aligned title/manifest metadata.
-- Updated service-worker cache version for the renamed release.
-- Added GitHub-ready documentation, repository hygiene files, and release QA notes.
-- Preserved the long-form six-phase story structure, hidden eight-phase Echo cycles, tactical stances, adaptive local agent, humanoid Wardens, Phase Echo, offline BGM/SFX, and responsive controls.
-- Preserved the licensed online integration seam for Google Maps Platform and authorized Genie workflows without bundling restricted tiles/assets.
+## 2.0.0 — Single-file cinematic consolidation
+
+- Consolidated the playable game into `The_IAH_Vyuha.html` with inline HTML/CSS/JavaScript.
+- Upgraded title/presentation to a premium cinematic treatment while retaining the The IAH brand prefix.
+- Fixed the Ashen Naga spawn condition so the boss is present on the actual boss phase.
+- Corrected late-loop enemy speed scaling.
+- Added adaptive render-density limits for mobile/tablet performance.
+- Added cinematic scanline/grain/letterbox treatment and mission-state feedback.
+- Added lightweight FPS visibility for desktop QA.
+- Expanded documentation around commercial readiness, privacy, offline behavior and future external-generation workflows.
+- Kept supporting QA/hosting/documentation files separate from the single playable artifact.

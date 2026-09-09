@@ -1,10 +1,10 @@
 {
-  "name":"The IAH Vyuha: Echoes of Hampi",
-  "short_name":"IAH Vyuha",
-  "start_url":"./index.html",
-  "display":"fullscreen",
-  "background_color":"#08060b",
-  "theme_color":"#0a0710",
-  "description":"Offline-first first-person strategy adventure with living resonance districts, adaptive tactics, human-like Wardens and long-form story chapters.",
-  "icons":[]
+  "name": "The IAH Vyuha: Echoes of Hampi",
+  "short_name": "IAH Vyuha",
+  "start_url": "./The_IAH_Vyuha.html",
+  "display": "fullscreen",
+  "background_color": "#08060b",
+  "theme_color": "#0a0710",
+  "description": "Offline-first first-person strategy adventure with living resonance districts, adaptive tactics, human-like Wardens and long-form story chapters.",
+  "icons": []
 }

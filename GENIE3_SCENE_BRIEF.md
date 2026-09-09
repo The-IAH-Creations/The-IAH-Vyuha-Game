@@ -1,4 +1,4 @@
-# Authorized Genie 3 scene brief - The IAH Vyuha v1.3
+# Authorized Genie 3 scene brief - The IAH Vyuha v2.0.0
 
 Purpose: generate an explorable Hampi-inspired environment for an authorized Genie 3 workflow, with district-specific spaces designed around the updated game loop. Keep gameplay collision geometry and objective coordinates separate from generated visuals so the scene can be swapped without changing game logic.
 
